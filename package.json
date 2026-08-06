@@ -1,0 +1,47 @@
+{
+  "name": "@makerportal/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the MakerPortal compute API — biquad filter design, rectangular-room eigenmodes, and LLM VRAM fit, computed by the same functions that render makerportal.ai.",
+  "license": "MIT",
+  "author": "MakerPortal",
+  "homepage": "https://makerportal.ai/lab",
+  "bugs": {
+    "url": "https://makerportal.ai/contact"
+  },
+  "mcpName": "ai.makerportal/compute",
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "dsp",
+    "biquad",
+    "acoustics",
+    "room-modes",
+    "llm",
+    "vram"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "bin": {
+    "makerportal-mcp": "bin/makerportal-mcp.mjs"
+  },
+  "exports": {
+    ".": "./src/bridge.mjs",
+    "./protocol": "./src/protocol.mjs"
+  },
+  "files": [
+    "bin/makerportal-mcp.mjs",
+    "src/bridge.mjs",
+    "src/protocol.mjs",
+    "server.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

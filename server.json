@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.makerportal/compute",
+  "title": "MakerPortal compute",
+  "description": "Deterministic engineering solvers: biquad filter design, room eigenmodes, LLM VRAM fit.",
+  "version": "0.1.0",
+  "websiteUrl": "https://makerportal.ai/lab",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@makerportal/mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "MAKERPORTAL_LICENSE_KEY",
+          "description": "Optional. Sent as an Authorization: Bearer header. The free tier needs no key and is the default.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "MAKERPORTAL_API_URL",
+          "description": "Optional. Override the endpoint, for development against a local server. Defaults to https://makerportal.ai/api/mcp.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://makerportal.ai/api/mcp"
+    }
+  ]
+}
