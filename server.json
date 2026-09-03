@@ -21,7 +21,7 @@
         },
         {
           "name": "MAKERPORTAL_API_URL",
-          "description": "Optional. Override the endpoint, for development against a local server. Defaults to https://makerportal.ai/api/mcp.",
+          "description": "Optional. Override the endpoint (https://, or http:// on localhost only, for a dev server). Defaults to https://makerportal.ai/api/mcp.",
           "isRequired": false,
           "isSecret": false
         }

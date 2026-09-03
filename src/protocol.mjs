@@ -24,8 +24,12 @@
  *
  * NOTHING HERE LOGS A CREDENTIAL. `MAKERPORTAL_LICENSE_KEY` is read, turned
  * into an `Authorization` header, and never printed, never included in an error
- * message, and never written to a file. `redactHeaders()` is what the error
- * paths use.
+ * message, and never written to a file. The mechanism is structural, not a
+ * redaction step: the errors thrown here (`TransportError`, `RemoteRpcError`)
+ * carry only status, endpoint, codes and truncated body text — never a headers
+ * object — so there is nothing for a credential to leak through. If a future
+ * error path ever wants to include headers, it MUST pass them through
+ * `redactHeaders()` first.
  */
 
 /** The public endpoint. Apex — Vercel 308s `www` away, so `www` is a redirect. */
@@ -44,16 +48,94 @@ export const CLIENT_PROTOCOL_VERSION = '2025-06-18';
 export const REQUEST_TIMEOUT_MS = 20_000;
 
 /**
+ * The largest response body this client will read into memory.
+ *
+ * `AbortSignal.timeout` bounds TIME, not BYTES: a hostile or misconfigured
+ * endpoint can push orders of magnitude more than any legitimate MCP answer
+ * within the 20 s window and exhaust the machine the agent is running on.
+ * The largest real answer here is a `tools/list` — a few kilobytes. Ten
+ * megabytes is a hundredfold headroom and still trivially small for RAM.
+ */
+export const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Read one response body with a hard byte cap.
+ *
+ * Streams rather than trusting `Content-Length` — a hostile server can omit or
+ * understate the header — and cancels the stream the moment the cap is crossed,
+ * so the connection is not drained into memory first.
+ */
+export async function readBodyCapped(response, maxBytes, endpoint) {
+  const declared = Number(response.headers?.get?.('content-length') ?? 0);
+  if (Number.isInteger(declared) && declared > maxBytes) {
+    throw new TransportError(
+      `${endpoint} declared a ${declared}-byte response, over the ${maxBytes}-byte cap.`,
+      { status: response.status, endpoint },
+    );
+  }
+  const reader = response.body?.getReader?.();
+  if (!reader) return '';
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new TransportError(
+        `${endpoint} sent more than ${maxBytes} bytes before finishing the response. Refusing to buffer it.`,
+        { status: response.status, endpoint },
+      );
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
+}
+
+/** Loopback hostnames where plain `http://` is acceptable for `MAKERPORTAL_API_URL`. */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
  * Where to POST.
  *
  * `MAKERPORTAL_API_URL` exists for development against a local `astro dev`
  * server; the default is the production endpoint, so the zero-config path is
  * the one that works.
+ *
+ * The override is validated, not taken verbatim: it must parse as a URL, it
+ * must be `https://` (plain `http://` is allowed only for loopback hosts, the
+ * dev-server case the variable exists for), and it must not carry `user:pass@`
+ * credentials — the endpoint is echoed to stderr at startup and embedded in
+ * error messages, so a credential in it would leak by construction.
+ * `buildHeaders()` attaches `Authorization: Bearer …` to whatever resolves
+ * here, which is why the scheme is checked before anything else happens.
  */
 export function resolveEndpoint(env = process.env) {
   const override = env.MAKERPORTAL_API_URL;
-  if (typeof override === 'string' && override.trim() !== '') return override.trim();
-  return DEFAULT_ENDPOINT;
+  if (typeof override !== 'string' || override.trim() === '') return DEFAULT_ENDPOINT;
+  const candidate = override.trim();
+  let url;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw new Error(`MAKERPORTAL_API_URL is not a valid URL: ${candidate}`);
+  }
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname))) {
+    throw new Error(
+      `MAKERPORTAL_API_URL must be https:// (or http:// on localhost, 127.0.0.1 or [::1]): ${candidate}`,
+    );
+  }
+  if (url.username !== '' || url.password !== '') {
+    throw new Error(`MAKERPORTAL_API_URL must not carry user:pass@ credentials — it is printed in diagnostics: ${candidate}`);
+  }
+  return candidate;
 }
 
 /**
@@ -218,6 +300,8 @@ function truncate(text, max) {
  *
  * `fetchImpl` is an argument so the whole path is testable without a network or
  * a server. Production passes nothing and gets the global `fetch`.
+ * `maxResponseBytes` bounds how much of the answer is ever buffered; see
+ * `MAX_RESPONSE_BYTES` for why that cap exists.
  */
 export async function postRpc({
   endpoint,
@@ -225,6 +309,7 @@ export async function postRpc({
   message,
   fetchImpl = globalThis.fetch,
   timeoutMs = REQUEST_TIMEOUT_MS,
+  maxResponseBytes = MAX_RESPONSE_BYTES,
 }) {
   let response;
   try {
@@ -239,7 +324,7 @@ export async function postRpc({
     throw new TransportError(`Could not reach ${endpoint}: ${reason}`, { endpoint });
   }
 
-  const text = await response.text();
+  const text = await readBodyCapped(response, maxResponseBytes, endpoint);
   return interpretResponse({
     status: response.status,
     contentType: response.headers.get('content-type'),

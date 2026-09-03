@@ -23,6 +23,11 @@
   "engines": {
     "node": ">=20.10.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/josh-hrisko/makerportal-hub.git",
+    "directory": "packages/mcp-client"
+  },
   "bin": {
     "makerportal-mcp": "bin/makerportal-mcp.mjs"
   },
@@ -39,7 +44,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@modelcontextprotocol/sdk": "1.30.0"
   },
   "publishConfig": {
     "access": "public"

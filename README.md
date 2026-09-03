@@ -64,7 +64,7 @@ needs no configuration at all.**
 | Variable | Effect |
 |---|---|
 | `MAKERPORTAL_LICENSE_KEY` | Sent as `Authorization: Bearer …`. Never logged, never written to disk, never included in an error message |
-| `MAKERPORTAL_API_URL` | Endpoint override, for development against a local server. Defaults to `https://makerportal.ai/api/mcp` |
+| `MAKERPORTAL_API_URL` | Endpoint override, for development against a local server. Must be `https://` — plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`. Defaults to `https://makerportal.ai/api/mcp` |
 
 ## What comes back
 
@@ -104,6 +104,21 @@ into HTTP POSTs. There is no filter design, no eigenmode solve and no VRAM
 arithmetic in this package — a local copy would drift from the site the moment
 either side changed, and you would have no way to tell which of the two answers
 you were reading.
+
+## Trust boundary
+
+This bridge forwards makerportal.ai's answers **verbatim**, which includes the
+tool descriptions and `instructions` your agent may show the user. Installing
+this package extends your agent's trust to that one host. Concretely:
+
+- Every request is a POST to `https://makerportal.ai/api/mcp` (or your
+  `MAKERPORTAL_API_URL`); no other network destination exists in this package,
+  and nothing executes at install time.
+- Responses are size-capped and time-capped, and a credential in
+  `MAKERPORTAL_LICENSE_KEY` never appears in an error message or a log.
+- Tool descriptions and instructions come from the server, like every MCP
+  server. If that matters for your threat model, pin the version and read the
+  changelog.
 
 ## API without MCP
 

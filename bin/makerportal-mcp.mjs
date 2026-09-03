@@ -5,7 +5,8 @@
  * Zero configuration is the intended path: with no environment set at all this
  * connects to https://makerportal.ai/api/mcp and serves the free tier.
  *
- *   MAKERPORTAL_API_URL      point somewhere else (a local `astro dev` server)
+ *   MAKERPORTAL_API_URL      point somewhere else (a local `astro dev` server);
+ *                            must be https://, or http:// on localhost only
  *   MAKERPORTAL_LICENSE_KEY  sent as `Authorization: Bearer …`, never logged
  *
  * A startup failure exits non-zero with a message on stderr. It does NOT fall

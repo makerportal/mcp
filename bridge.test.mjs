@@ -24,12 +24,14 @@ import { dirname, join } from 'node:path';
 import {
   CLIENT_PROTOCOL_VERSION,
   DEFAULT_ENDPOINT,
+  MAX_RESPONSE_BYTES,
   RemoteRpcError,
   TransportError,
   buildHeaders,
   interpretResponse,
   jsonRpcRequest,
   postRpc,
+  readBodyCapped,
   redactHeaders,
   resolveEndpoint,
 } from './src/protocol.mjs';
@@ -63,6 +65,34 @@ describe('endpoint', () => {
 
   test('an empty override falls back to production rather than to an empty URL', () => {
     assert.equal(resolveEndpoint({ MAKERPORTAL_API_URL: '   ' }), DEFAULT_ENDPOINT);
+  });
+
+  test('an https override is used verbatim', () => {
+    assert.equal(resolveEndpoint({ MAKERPORTAL_API_URL: 'https://example.com/api/mcp' }), 'https://example.com/api/mcp');
+  });
+
+  test('plain http is accepted only for loopback hosts — the dev-server case', () => {
+    assert.equal(resolveEndpoint({ MAKERPORTAL_API_URL: 'http://localhost:4477/api/mcp' }), 'http://localhost:4477/api/mcp');
+    assert.equal(resolveEndpoint({ MAKERPORTAL_API_URL: 'http://127.0.0.1:4477/api/mcp' }), 'http://127.0.0.1:4477/api/mcp');
+    assert.equal(resolveEndpoint({ MAKERPORTAL_API_URL: 'http://[::1]:4477/api/mcp' }), 'http://[::1]:4477/api/mcp');
+    assert.throws(
+      () => resolveEndpoint({ MAKERPORTAL_API_URL: 'http://api.example.com/api/mcp' }),
+      (error) => error.message.includes('https://'),
+    );
+  });
+
+  test('an override carrying user:pass@ credentials is refused — the endpoint is echoed in diagnostics', () => {
+    assert.throws(
+      () => resolveEndpoint({ MAKERPORTAL_API_URL: 'https://user:pass@example.com/api/mcp' }),
+      (error) => error.message.includes('credentials') && error.message.includes('MAKERPORTAL_API_URL'),
+    );
+  });
+
+  test('a non-URL override is refused, naming the variable to fix', () => {
+    assert.throws(
+      () => resolveEndpoint({ MAKERPORTAL_API_URL: 'not a url' }),
+      (error) => error.message.includes('MAKERPORTAL_API_URL'),
+    );
   });
 });
 
@@ -261,6 +291,73 @@ describe('postRpc', () => {
       assert.ok(error, 'expected a rejection');
       assert.equal(`${error.message}${error.stack ?? ''}`.includes(SECRET), false, 'the license key leaked into an error');
     }
+  });
+
+  /**
+   * `AbortSignal.timeout` bounds time, not bytes. A hostile endpoint can push
+   * gigabytes inside the 20 s window; the cap must refuse to buffer them.
+   */
+  test('a response over the byte cap is refused rather than read into memory', async () => {
+    await assert.rejects(
+      postRpc({
+        endpoint: 'http://localhost:1/api/mcp',
+        headers: buildHeaders({}),
+        message: jsonRpcRequest(1, 'ping'),
+        fetchImpl: async () =>
+          new Response('x'.repeat(64), { status: 200, headers: { 'content-type': 'application/json' } }),
+        maxResponseBytes: 8,
+      }),
+      (error) => error instanceof TransportError && error.message.includes('8 bytes'),
+    );
+  });
+
+  test('a response body at or under the cap reads normally', async () => {
+    const outcome = await postRpc({
+      endpoint: 'http://localhost:1/api/mcp',
+      headers: buildHeaders({}),
+      message: jsonRpcRequest(1, 'ping'),
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { ok: true } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      maxResponseBytes: 10_000,
+    });
+    assert.deepEqual(outcome.result, { ok: true });
+  });
+
+  test('the default cap is the exported maximum', async () => {
+    let seen = null;
+    await postRpc({
+      endpoint: 'http://localhost:1/api/mcp',
+      headers: buildHeaders({}),
+      message: jsonRpcRequest(1, 'ping'),
+      fetchImpl: async () => {
+        seen = true;
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+    assert.ok(seen);
+    assert.ok(MAX_RESPONSE_BYTES >= 10 * 1024 * 1024);
+  });
+
+  test('readBodyCapped refuses a declared content-length over the cap before reading', async () => {
+    await assert.rejects(
+      readBodyCapped(
+        new Response('tiny', { status: 200, headers: { 'content-type': 'application/json', 'content-length': '999999' } }),
+        1024,
+        'http://localhost:1/api/mcp',
+      ),
+      (error) => error instanceof TransportError && error.message.includes('declared'),
+    );
+  });
+
+  test('readBodyCapped returns an empty string for a body-less response', async () => {
+    const text = await readBodyCapped(new Response('', { status: 202 }), 1024, 'http://localhost:1/api/mcp');
+    assert.equal(text, '');
   });
 });
 
