@@ -25,12 +25,16 @@
 #      deliberately out of the MVP. `npm trust`'s prerequisites say "Package
 #      must exist", and staged publishing docs say "you cannot stage a
 #      brand-new package". The web docs' "navigate to your package settings"
-#      indeed assumes a package that exists. So the order is forced:
-#      bootstrap publish with the bypass token → configure the trusted
-#      publisher (only then does the settings page exist) → verify OIDC on a
-#      second dispatch with the token env removed (branch `trusted-oidc`
-#      carries that edit) → revoke the token → package settings → Publishing
-#      access → "Require two-factor authentication and disallow tokens".
+#      indeed assumes a package that exists. So the order is forced: bootstrap
+#      publish 0.1.0 with the bypass token from main → configure the trusted
+#      publisher (only then does the settings page exist) → verify OIDC from
+#      THIS BRANCH (token env removed, npm ≥ 11.5.1 installed — Node 22
+#      bundles npm 10.x which cannot do OIDC; `npm --version` prints to the
+#      log as the measurement) → only after it is green: revoke the bootstrap
+#      token, delete the NPM_TOKEN secret, merge this branch, and set package
+#      settings → Publishing access → "Require two-factor authentication and
+#      disallow tokens" (npm's maximum-security posture; trusted publishers
+#      keep working — they are OIDC, not tokens).
 #   3. BOOTSTRAP token (one publish, then gone): the existing
 #      `makerportal-mcp-publish` token cannot be salvaged — Bypass is a
 #      creation-time checkbox, npm has no token edit for it. CREATE a NEW
@@ -72,6 +76,10 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # OIDC trusted publishing needs npm ≥ 11.5.1 (11.15.0 for `npm trust`);
+      # the npm bundled with Node 22 is 10.x. The printed version is the
+      # measurement this run leaves in the log.
+      - run: npm install -g npm@^11.15.0 && npm --version
       - run: npm ci
       # The gates run BEFORE the publish, not after. A tarball is not
       # unpublishable once it is out.
@@ -85,6 +93,9 @@ jobs:
       - run: node --test bridge.test.mjs
       - name: Boundary gate — no solver source may ship
         run: node --test boundary.test.mjs
+      # OIDC only — deliberately NO NODE_AUTH_TOKEN here. npm ≥ 11.5.1 detects
+      # the Actions OIDC environment (id-token: write) and exchanges it for a
+      # short-lived publish credential bound to this repo, workflow file and
+      # environment. If the trusted publisher is misconfigured this fails —
+      # that is the verification; do not re-add the token to "fix" it.
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

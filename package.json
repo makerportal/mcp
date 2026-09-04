@@ -1,6 +1,6 @@
 {
   "name": "@makerportal/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for the MakerPortal compute API — biquad filter design, rectangular-room eigenmodes, and LLM VRAM fit, computed by the same functions that render makerportal.ai.",
   "license": "MIT",
   "author": "MakerPortal",

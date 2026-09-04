@@ -47,9 +47,12 @@ you can read it.
 the real tarball and greps every packed byte for solver symbols, so a filter
 design or an eigenmode solve cannot be added here without failing CI.
 
-Releases are published from `.github/workflows/publish.yml` with
-`--provenance`, so npm carries a signed attestation binding the tarball to the
-commit and workflow run that produced it.
+Releases are published from `.github/workflows/publish.yml`. Every publish is
+OIDC **trusted publishing**: the workflow exchanges a short-lived GitHub-issued
+credential (bound to this repository, the `publish.yml` workflow file and the
+`npm-publish` environment) for the publish itself, and npm generates the
+provenance attestation automatically. No npm token can publish this package,
+and no long-lived write credential exists anywhere in the pipeline.
 
 
 ## Install
