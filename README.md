@@ -18,6 +18,24 @@ every published page through the registry and fails the build if one ever does.
 Nothing is fetched from a third party and nothing is recalled by a language
 model. The same inputs always produce the same answer.
 
+## Licence, and what it does and does not cover
+
+The code in this repository is **MIT** (see [`LICENSE`](LICENSE)) — a transport
+shim, roughly 400 lines of JavaScript.
+
+**It does not cover the answers the package retrieves.** Results from
+makerportal.ai carry `license: "free-with-attribution"` and a
+`provenance.canonicalUrl`; use them, and cite that URL.
+
+> This note lives here rather than at the foot of `LICENSE`, and that is not
+> cosmetic. GitHub classifies a licence by matching its TEXT, so six lines
+> appended after the MIT body dropped the file below the detector's similarity
+> threshold and the repository reported `NOASSERTION` — no licence at all, on a
+> package asking to be trusted. The same mistake was made and fixed in
+> `makerportal/reference-vectors` the same day. Keep `LICENSE` verbatim; put
+> every clarification somewhere else.
+
+
 ## Where this lives, and what it does not contain
 
 This repository is the source for [`@makerportal/mcp`](https://www.npmjs.com/package/@makerportal/mcp).
