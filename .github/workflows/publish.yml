@@ -19,19 +19,31 @@
 #      GitHub Actions: user `makerportal`, repo `mcp`, workflow `publish.yml`,
 #      environment `npm-publish`, allow `npm publish`. Provenance is automatic
 #      on this path; the `--provenance` flag below is harmless if kept.
-#      OPEN QUESTION as of D-389: the docs assume the package already exists
-#      ("navigate to your package settings") and @makerportal/mcp does not yet
-#      (registry 404). If npmjs.com refuses trust for an unborn package, first
-#      publish goes by the fallback token and trust is configured right after.
-#      Record which branch happened; do not assume.
-#   3. FALLBACK token (only until OIDC verifies, then revoke): a GRANULAR token
-#      scoped to the @makerportal scope (pre-publish the picker offers ONLY the
-#      scope — the package does not exist to pin; never "All packages", never
-#      Classic), no orgs, no IP ranges, WITH "Bypass two-factor authentication"
-#      CHECKED. Unchecked (the default) fails CI with EOTP *after* provenance
-#      is signed (run 33902417578): attestation logged, registry 404. The Bypass
-#      screen warns toward trusted publishing instead — correct, see (2).
-#      Store as repo secret NPM_TOKEN; the publish step below is its only reader.
+#      MEASURED 2026-09-05 (D-390): trust CANNOT be created before the first
+#      publish. npm/cli#8544 ("Allow publishing initial version with OIDC") is
+#      still open; npm's own answer (2025-09-05) is that first publish was
+#      deliberately out of the MVP. `npm trust`'s prerequisites say "Package
+#      must exist", and staged publishing docs say "you cannot stage a
+#      brand-new package". The web docs' "navigate to your package settings"
+#      indeed assumes a package that exists. So the order is forced:
+#      bootstrap publish with the bypass token → configure the trusted
+#      publisher (only then does the settings page exist) → verify OIDC on a
+#      second dispatch with the token env removed (branch `trusted-oidc`
+#      carries that edit) → revoke the token → package settings → Publishing
+#      access → "Require two-factor authentication and disallow tokens".
+#   3. BOOTSTRAP token (one publish, then gone): the existing
+#      `makerportal-mcp-publish` token cannot be salvaged — Bypass is a
+#      creation-time checkbox, npm has no token edit for it. CREATE a NEW
+#      granular token: name it e.g. `mcp-bootstrap-oidc-handoff`, Description
+#      free text ("one-shot bootstrap for makerportal/mcp, revoke after run"),
+#      Bypass two-factor authentication CHECKED, Packages and scopes →
+#      "Only select packages and scopes" → the `@makerportal` scope
+#      (read/write; pre-publish the picker offers only the scope — never
+#      "All packages", never Classic), no orgs, no IP ranges, Expiration
+#      CUSTOM ≈ +3 days (minimum is 1 day; revoke anyway once OIDC verifies).
+#      Overwrite the repo secret NPM_TOKEN with it. npm's Bypass screen warns
+#      toward trusted publishing — correct, and this token exists only to pay
+#      the one publish OIDC cannot do (see (2)).
 #   4. CREATE the `npm-publish` environment by hand (exact lowercase name) —
 #      a workflow `environment:` reference creates nothing, so until this
 #      exists the required-reviewer gate silently does not exist. Required
