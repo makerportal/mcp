@@ -12,50 +12,74 @@
 # commit and this workflow run. For a package an AGENT executes, that is the
 # strongest trust signal available, and it cannot be retrofitted later.
 #
-# ── SETUP THE OWNER MUST DO ONCE ────────────────────────────────────────────
-#   1. npm 2FA: `npm profile enable-2fa auth-and-writes` (stays ON forever).
-#   2. OIDC TRUSTED PUBLISHING (adopted 2026-09-04, D-389) — no long-lived
-#      write token. On npmjs.com, package settings → Trusted Publisher →
-#      GitHub Actions: user `makerportal`, repo `mcp`, workflow `publish.yml`,
-#      environment `npm-publish`, allow `npm publish`. Provenance is automatic
-#      on this path; the `--provenance` flag below is harmless if kept.
-#      MEASURED 2026-09-05 (D-390): trust CANNOT be created before the first
-#      publish. npm/cli#8544 ("Allow publishing initial version with OIDC") is
-#      still open; npm's own answer (2025-09-05) is that first publish was
-#      deliberately out of the MVP. `npm trust`'s prerequisites say "Package
-#      must exist", and staged publishing docs say "you cannot stage a
-#      brand-new package". The web docs' "navigate to your package settings"
-#      indeed assumes a package that exists. So the order is forced: bootstrap
-#      publish 0.1.0 with the bypass token from main → configure the trusted
-#      publisher (only then does the settings page exist) → verify OIDC from
-#      THIS BRANCH (token env removed, npm ≥ 11.5.1 installed — Node 22
-#      bundles npm 10.x which cannot do OIDC; `npm --version` prints to the
-#      log as the measurement) → only after it is green: revoke the bootstrap
-#      token, delete the NPM_TOKEN secret, merge this branch, and set package
-#      settings → Publishing access → "Require two-factor authentication and
-#      disallow tokens" (npm's maximum-security posture; trusted publishers
-#      keep working — they are OIDC, not tokens).
-#   3. BOOTSTRAP token (one publish, then gone): the existing
-#      `makerportal-mcp-publish` token cannot be salvaged — Bypass is a
-#      creation-time checkbox, npm has no token edit for it. CREATE a NEW
-#      granular token: name it e.g. `mcp-bootstrap-oidc-handoff`, Description
-#      free text ("one-shot bootstrap for makerportal/mcp, revoke after run"),
-#      Bypass two-factor authentication CHECKED, Packages and scopes →
-#      "Only select packages and scopes" → the `@makerportal` scope
-#      (read/write; pre-publish the picker offers only the scope — never
-#      "All packages", never Classic), no orgs, no IP ranges, Expiration
-#      CUSTOM ≈ +3 days (minimum is 1 day; revoke anyway once OIDC verifies).
-#      Overwrite the repo secret NPM_TOKEN with it. npm's Bypass screen warns
-#      toward trusted publishing — correct, and this token exists only to pay
-#      the one publish OIDC cannot do (see (2)).
-#   4. CREATE the `npm-publish` environment by hand (exact lowercase name) —
-#      a workflow `environment:` reference creates nothing, so until this
-#      exists the required-reviewer gate silently does not exist. Required
-#      reviewer: the owner. Solo owner: Prevent-self-review stays OFF or nobody
-#      can approve. No environment secrets needed. Also requires npm CLI ≥
-#      11.5.1 for OIDC: verify what setup-node + Node 22 yields (docs example
-#      pins Node 24); GitHub-hosted runners only; repository.url must exactly
-#      match this repo.
+# ── PUBLISHING POSTURE: DONE. NOTHING HERE NEEDS SETTING UP AGAIN. ──────────
+#
+# Settled 2026-09-04 (D-391 in the makerportal-hub estate). This package is
+# published and can be published ONLY by this workflow file, running in the
+# `npm-publish` environment, on this repository. There is no token anywhere in
+# the path — not in a secret, not in an env block, not on a laptop.
+#
+#   · npm 2FA is ON at `auth-and-writes`.
+#   · Package Settings -> Publishing access -> "Require two-factor
+#     authentication and disallow bypass 2fa tokens". (The label is "disallow
+#     BYPASS 2FA tokens", not "disallow tokens" — earlier docs had it wrong.)
+#     npm states all publishing-access options are compatible with trusted
+#     publishers, and that is now observed, not assumed.
+#   · Trusted publisher configured: GitHub Actions / `makerportal` / `mcp` /
+#     `publish.yml` / env `npm-publish`, allowing `npm publish` AND
+#     `npm stage publish`. THE CONNECTION IS IMMUTABLE — npm's form says the
+#     provider and required fields "cannot be changed later"; to change them you
+#     delete it and create a new one.
+#   · The `npm-publish` environment exists with the owner as required reviewer
+#     and Prevent-self-review OFF (solo owner, or nobody can approve). A
+#     workflow `environment:` reference CREATES NOTHING — if that environment is
+#     ever deleted, this gate silently stops existing.
+#   · Both granular tokens are revoked and the `NPM_TOKEN` repo secret is
+#     deleted. The repository has zero secrets. That is the intended state.
+#
+# ── WHY `npm publish` IS ALLOWED AND NOT STAGING-ONLY ──────────────────────
+# npm's form warns "Not recommended. For stronger security, leave unchecked to
+# allow staged publishing only." Direct publish was allowed deliberately: this
+# workflow runs `npm publish`, so staging-only would fail the run for a reason
+# unrelated to OIDC. The compensating control sits EARLIER in the chain — the
+# `npm-publish` environment's required reviewer gates every dispatch before any
+# credential is minted. Moving to staging-only is available at the cost of
+# delete-and-recreate plus changing the command below.
+#
+# ── IF YOU ARE HERE BECAUSE A PUBLISH WENT RED ─────────────────────────────
+#
+#  1. READ WHICH STEP FAILED before concluding anything about OIDC. On
+#     2026-09-04 run 33916613232 went red at the boundary gate with
+#     `npm publish` SKIPPED — it measured nothing about trusted publishing in
+#     either direction and cost an owner approval. `server.json` had been left
+#     at the old version while `package.json` moved. Run `node --test
+#     boundary.test.mjs` and `node --test bridge.test.mjs` LOCALLY on the exact
+#     ref first; a gated run is too expensive to spend on a local failure.
+#  2. **DO NOT RE-ADD A TOKEN TO "FIX" A RED PUBLISH STEP.** A failure there is
+#     the misconfiguration detector working. Fix the trust config (delete and
+#     recreate) and re-dispatch.
+#  3. `ENEEDAUTH` means the npm on the runner is < 11.5.1. Measured on
+#     2026-09-04: `npm install -g npm@^11.15.0` yielded **11.19.1** on Node
+#     **v22.23.2**, both above the floors (npm 11.5.1, Node 22.14.0). The
+#     `npm --version` line below is that measurement, left in the log on
+#     purpose.
+#  4. A GREEN RUN IS NOT PROOF, and neither is a sigstore log entry. The
+#     registry and a clean-temp-dir install are the oracles. Expect the
+#     registry to LAG: the OIDC publish printed "Your package is being
+#     processed and may take a few minutes to become available" and took
+#     **2 min 08 s** to appear, where the token publish took 4 s and printed no
+#     such line. Absence at t+0 is not absence — poll to a transition before
+#     reporting a problem.
+#  5. `setup-node` with `registry-url` exports a placeholder
+#     `NODE_AUTH_TOKEN: XXXXX-XXXXX-XXXXX-XXXXX`. That is expected and appears
+#     in npm's own trusted-publishing example. It is not a leaked secret and it
+#     is not what authenticates the publish.
+#
+# ── THE ONE THING THAT CANNOT BE REDONE ────────────────────────────────────
+# The first publish of a package cannot use OIDC (npm/cli#8544, still open).
+# That bootstrap is spent. If this package is ever unpublished and recreated,
+# the whole bootstrap-token dance in D-390/D-391 has to happen again.
+#
 name: Publish
 on:
   workflow_dispatch:
