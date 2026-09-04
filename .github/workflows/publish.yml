@@ -1,0 +1,55 @@
+# Publishes @makerportal/mcp to npm WITH PROVENANCE.
+#
+# ── WHY THIS WORKFLOW LIVES HERE AND NOT IN THE MONOREPO ────────────────────
+# npm provenance requires that the publishing workflow live in the repository
+# the manifest's `repository` field names, and that the repository be public.
+# The package was previously inside a private monorepo, so provenance was
+# impossible and a `repository` field would have rendered a link that 404s for
+# every visitor — worse than absent on a package whose whole argument is "it is
+# seven small files, go read them".
+#
+# `--provenance` produces a signed attestation binding this tarball to this
+# commit and this workflow run. For a package an AGENT executes, that is the
+# strongest trust signal available, and it cannot be retrofitted later.
+#
+# ── SETUP THE OWNER MUST DO ONCE ────────────────────────────────────────────
+#   1. npm 2FA: `npm profile enable-2fa auth-and-writes`
+#   2. a GRANULAR automation token scoped to @makerportal/mcp ONLY — never the
+#      account-wide classic token — as the repo secret NPM_TOKEN
+#   3. a required reviewer on the `npm-publish` environment
+name: Publish
+on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: "Version to publish. Must equal package.json exactly — this is the guard against publishing something other than what you reviewed."
+        required: true
+permissions:
+  contents: read
+  id-token: write        # required for provenance
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      # The gates run BEFORE the publish, not after. A tarball is not
+      # unpublishable once it is out.
+      - name: Version guard
+        run: |
+          declared=$(node -p "require('./package.json').version")
+          if [ "$declared" != "${{ inputs.package_version }}" ]; then
+            echo "package.json says $declared, you asked for ${{ inputs.package_version }}" >&2
+            exit 1
+          fi
+      - run: node --test bridge.test.mjs
+      - name: Boundary gate — no solver source may ship
+        run: node --test boundary.test.mjs
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

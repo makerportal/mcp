@@ -18,6 +18,22 @@ every published page through the registry and fails the build if one ever does.
 Nothing is fetched from a third party and nothing is recalled by a language
 model. The same inputs always produce the same answer.
 
+## Where this lives, and what it does not contain
+
+This repository is the source for [`@makerportal/mcp`](https://www.npmjs.com/package/@makerportal/mcp).
+It is public on purpose: the package's whole claim is that it is a transport
+shim holding no answers of its own, and that claim is only worth anything if
+you can read it.
+
+`boundary.test.mjs` is what makes it a claim rather than a promise — it packs
+the real tarball and greps every packed byte for solver symbols, so a filter
+design or an eigenmode solve cannot be added here without failing CI.
+
+Releases are published from `.github/workflows/publish.yml` with
+`--provenance`, so npm carries a signed attestation binding the tarball to the
+commit and workflow run that produced it.
+
+
 ## Install
 
 Nothing to install. Point your MCP client at it.

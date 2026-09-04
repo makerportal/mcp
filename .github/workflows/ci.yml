@@ -1,0 +1,24 @@
+# Every push and PR runs the same suites the monorepo used to run, so extracting
+# this package did not cost the coverage — it moved it.
+#
+#   bridge.test.mjs    the protocol, endpoint validation, header handling
+#   boundary.test.mjs  packs the REAL tarball and greps every packed byte for
+#                      solver symbols, proving no answer is computed here
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node --test bridge.test.mjs
+      - run: node --test boundary.test.mjs
