@@ -1,6 +1,8 @@
 # @makerportal/mcp
 
-Three deterministic engineering solvers as MCP tools, from
+[![smithery badge](https://smithery.ai/badge/makerportal/compute)](https://smithery.ai/servers/makerportal/compute)
+
+Five deterministic engineering solvers as MCP tools, from
 [makerportal.ai](https://makerportal.ai).
 
 | Tool | What it answers |
@@ -8,6 +10,8 @@ Three deterministic engineering solvers as MCP tools, from
 | `biquadDesign` | RBJ-cookbook biquad coefficients at any sample rate, pole/zero geometry, the real −3 dB crossings, a Q sweep, a gain sweep, and what 16/24/32-bit word lengths do to stability and in-band error |
 | `roomModes` | Every eigenmode of a rectangular room below a cutoff, axial/tangential/oblique, pile-ups, the Bolt-area proportion test, and Schroeder crossovers at two assumed RT60 values |
 | `llmVramFit` | Whether a given model fits a given accelerator at every quantization — weight bytes, KV cache, headroom, the largest context that fits, and the bandwidth-limited decode ceiling |
+| `solenoidField` | The on-axis magnetic field of an air-core solenoid — the full Biot-Savart profile, the infinite-solenoid shortcut and how far off it is, and the uniform-field region |
+| `roomShapeBand` | The best rectangular room proportions for a given volume — ratio candidates scored on modal spacing, against the Bolt area |
 
 **Every tool runs the identical function that renders the published page.** Not
 a port of it, not a re-derivation — the same function, reached by reference
